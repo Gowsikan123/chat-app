@@ -11,16 +11,18 @@ const socketHandlers = require('./socket/handlers');
 const app = express();
 const httpServer = createServer(app);
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://chat-app-sooty-one-74.vercel.app',
-  process.env.CLIENT_URL
-].filter(Boolean);
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // allow non-browser requests
+  if (origin === 'http://localhost:5173') return true;
+  if (origin === 'http://localhost:3000') return true;
+  if (origin.endsWith('.vercel.app')) return true;
+  if (process.env.CLIENT_URL && origin === process.env.CLIENT_URL) return true;
+  return false;
+};
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -30,7 +32,7 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 };
 
-// Socket.io — must be attached to httpServer, not app
+// Socket.io
 const io = new Server(httpServer, {
   cors: corsOptions
 });
@@ -43,7 +45,7 @@ app.use(express.json());
 app.use('/auth', authRouter);
 app.use('/rooms', roomsRouter);
 
-// Health check — Railway uses this
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -65,5 +67,4 @@ socketHandlers(io);
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
 });
