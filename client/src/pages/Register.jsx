@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { useSocket } from '../context/SocketContext'
 
 export default function Register() {
   const navigate = useNavigate()
+  const { reconnect } = useSocket()
   const [form, setForm] = useState({ username: '', password: '', confirm: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -32,6 +34,7 @@ export default function Register() {
       })
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
+      reconnect(data.token)
       navigate('/chat')
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed')
