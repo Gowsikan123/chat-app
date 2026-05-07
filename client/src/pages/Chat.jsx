@@ -8,7 +8,7 @@ import MessageInput from '../components/MessageInput'
 import UserList from '../components/UserList'
 
 export default function Chat() {
-  const { socket, connected } = useSocket()
+  const { getSocket, connected } = useSocket()
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
 
   const [rooms, setRooms] = useState([])
@@ -17,7 +17,7 @@ export default function Chat() {
   const [onlineUsers, setOnlineUsers] = useState([])
   const [typingUsers, setTypingUsers] = useState([])
   const [unreadCounts, setUnreadCounts] = useState({})
-  const [reactions, setReactions] = useState({}) // { messageId: { emoji: [userId, ...] } }
+  const [reactions, setReactions] = useState({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
 
@@ -31,15 +31,15 @@ export default function Chat() {
       .catch(console.error)
   }, [])
 
-  // Socket event listeners
+  // Socket event listeners — re-attach whenever connected changes
   useEffect(() => {
-    if (!socket) return
+    const socket = getSocket()
+    if (!socket || !connected) return
 
     const onNewMessage = (message) => {
-      setMessages((prev) => [...prev, message])
-
-      // Increment unread if not in this room
-      if (activeRoomRef.current?.id !== message.room_id) {
+      if (activeRoomRef.current?.id === message.room_id) {
+        setMessages((prev) => [...prev, message])
+      } else {
         setUnreadCounts((prev) => ({
           ...prev,
           [message.room_id]: (prev[message.room_id] || 0) + 1
@@ -48,16 +48,12 @@ export default function Chat() {
     }
 
     const onOnlineUsers = ({ roomId, users }) => {
-      if (activeRoomRef.current?.id === roomId) {
-        setOnlineUsers(users)
-      }
+      if (activeRoomRef.current?.id === roomId) setOnlineUsers(users)
     }
 
     const onUserTyping = ({ username, userId }) => {
       if (userId === currentUser.id) return
-      setTypingUsers((prev) =>
-        prev.includes(username) ? prev : [...prev, username]
-      )
+      setTypingUsers((prev) => prev.includes(username) ? prev : [...prev, username])
     }
 
     const onUserStoppedTyping = ({ username }) => {
@@ -73,20 +69,14 @@ export default function Chat() {
       setReactions((prev) => {
         const msgReactions = { ...(prev[messageId] || {}) }
         const emojiUsers = [...(msgReactions[emoji] || [])]
-
         if (action === 'added') {
           if (!emojiUsers.includes(userId)) emojiUsers.push(userId)
         } else {
           const idx = emojiUsers.indexOf(userId)
           if (idx > -1) emojiUsers.splice(idx, 1)
         }
-
-        if (emojiUsers.length === 0) {
-          delete msgReactions[emoji]
-        } else {
-          msgReactions[emoji] = emojiUsers
-        }
-
+        if (emojiUsers.length === 0) delete msgReactions[emoji]
+        else msgReactions[emoji] = emojiUsers
         return { ...prev, [messageId]: msgReactions }
       })
     }
@@ -106,9 +96,17 @@ export default function Chat() {
       socket.off('user_offline', onUserOffline)
       socket.off('message_reaction', onMessageReaction)
     }
-  }, [socket, currentUser.id])
+  }, [connected, getSocket, currentUser.id])
+
+  // Re-join active room whenever socket reconnects
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket || !connected || !activeRoomRef.current) return
+    socket.emit('join_room', { roomId: activeRoomRef.current.id })
+  }, [connected, getSocket])
 
   const selectRoom = useCallback(async (room) => {
+    const socket = getSocket()
     if (activeRoomRef.current) {
       socket?.emit('leave_room', { roomId: activeRoomRef.current.id })
     }
@@ -118,14 +116,10 @@ export default function Chat() {
     setOnlineUsers([])
     setTypingUsers([])
     setSidebarOpen(false)
-
-    // Clear unread for this room
     setUnreadCounts((prev) => ({ ...prev, [room.id]: 0 }))
 
-    // Join room via socket
     socket?.emit('join_room', { roomId: room.id })
 
-    // Load message history
     try {
       const { data } = await api.get(`/rooms/${room.id}/messages`)
       setMessages(data)
@@ -133,9 +127,8 @@ export default function Chat() {
       console.error('Failed to load messages:', err)
     }
 
-    // Join via REST too (idempotent)
     api.post(`/rooms/${room.id}/join`).catch(() => {})
-  }, [socket])
+  }, [getSocket])
 
   const handleRoomCreated = useCallback((room) => {
     setRooms((prev) => [...prev, { ...room, member_count: 1 }])
@@ -143,32 +136,31 @@ export default function Chat() {
   }, [selectRoom])
 
   const handleSend = useCallback((content) => {
+    const socket = getSocket()
     if (!activeRoomRef.current || !socket) return
     socket.emit('send_message', { roomId: activeRoomRef.current.id, content })
-  }, [socket])
+  }, [getSocket])
 
   const handleTypingStart = useCallback(() => {
+    const socket = getSocket()
     if (!activeRoomRef.current || !socket) return
     socket.emit('typing_start', { roomId: activeRoomRef.current.id })
-  }, [socket])
+  }, [getSocket])
 
   const handleTypingStop = useCallback(() => {
+    const socket = getSocket()
     if (!activeRoomRef.current || !socket) return
     socket.emit('typing_stop', { roomId: activeRoomRef.current.id })
-  }, [socket])
+  }, [getSocket])
 
   const handleReact = useCallback((messageId, emoji) => {
+    const socket = getSocket()
     if (!activeRoomRef.current || !socket) return
-    socket.emit('react_message', {
-      messageId,
-      emoji,
-      roomId: activeRoomRef.current.id
-    })
-  }, [socket])
+    socket.emit('react_message', { messageId, emoji, roomId: activeRoomRef.current.id })
+  }, [getSocket])
 
   return (
     <div className="flex h-screen bg-gray-850 overflow-hidden">
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 z-20 md:hidden"
@@ -176,7 +168,6 @@ export default function Chat() {
         />
       )}
 
-      {/* Sidebar */}
       <div className={`
         fixed md:relative z-30 md:z-auto
         w-64 h-full flex-shrink-0
@@ -193,9 +184,7 @@ export default function Chat() {
         />
       </div>
 
-      {/* Main chat area */}
       <div className="flex flex-1 flex-col min-w-0 bg-gray-850">
-        {/* Mobile top bar */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900 border-b border-gray-700/50 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -235,7 +224,6 @@ export default function Chat() {
             />
           </ChatRoom>
 
-          {/* User list — hidden on mobile unless toggled */}
           <div className={`
             w-48 flex-shrink-0
             hidden md:block
@@ -246,7 +234,6 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Connection status */}
       {!connected && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-yellow-900/90 border border-yellow-600/50 text-yellow-300 text-xs px-4 py-2 rounded-full shadow-lg">
           Reconnecting...

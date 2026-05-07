@@ -6,14 +6,14 @@ const SocketContext = createContext(null)
 export const SocketProvider = ({ children }) => {
   const [connected, setConnected] = useState(false)
   const socketRef = useRef(null)
+  // A stable ref-based getter so consumers always get the latest socket
+  const getSocket = useCallback(() => socketRef.current, [])
 
   const connect = useCallback((token) => {
-    // Disconnect existing socket first
     if (socketRef.current) {
       socketRef.current.disconnect()
       socketRef.current = null
     }
-
     if (!token) return
 
     const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001', {
@@ -29,41 +29,34 @@ export const SocketProvider = ({ children }) => {
       setConnected(true)
       console.log('Socket connected:', socket.id)
     })
-
     socket.on('disconnect', () => {
       setConnected(false)
-      console.log('Socket disconnected')
     })
-
     socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err.message)
+      console.error('Socket error:', err.message)
       setConnected(false)
     })
 
     socketRef.current = socket
+    // Trigger re-render so consumers get updated context
+    setConnected(false)
   }, [])
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    if (token) {
-      connect(token)
-    }
-
+    if (token) connect(token)
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect()
-        socketRef.current = null
-      }
+      socketRef.current?.disconnect()
+      socketRef.current = null
     }
   }, [connect])
 
-  // Call this after login/register to connect with fresh token
   const reconnect = useCallback((token) => {
     connect(token)
   }, [connect])
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, connected, reconnect }}>
+    <SocketContext.Provider value={{ getSocket, connected, reconnect }}>
       {children}
     </SocketContext.Provider>
   )
