@@ -1,0 +1,46 @@
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  username      TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rooms (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT UNIQUE NOT NULL,
+  created_by INTEGER REFERENCES users(id),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id    INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id    INTEGER REFERENCES users(id),
+  content    TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS room_members (
+  room_id   INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (room_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS direct_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sender_id   INTEGER REFERENCES users(id),
+  receiver_id INTEGER REFERENCES users(id),
+  content     TEXT NOT NULL,
+  read        INTEGER DEFAULT 0,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS reactions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+  user_id    INTEGER REFERENCES users(id),
+  emoji      TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(message_id, user_id, emoji)
+);
