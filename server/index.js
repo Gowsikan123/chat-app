@@ -11,19 +11,32 @@ const socketHandlers = require('./socket/handlers');
 const app = express();
 const httpServer = createServer(app);
 
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://chat-app-sooty-one-74.vercel.app',
+  process.env.CLIENT_URL
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+};
 
 // Socket.io — must be attached to httpServer, not app
 const io = new Server(httpServer, {
-  cors: {
-    origin: CLIENT_URL,
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
+  cors: corsOptions
 });
 
 // Express middleware
-app.use(cors({ origin: CLIENT_URL, credentials: true }));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes
@@ -52,5 +65,5 @@ socketHandlers(io);
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`   Client URL: ${CLIENT_URL}`);
+  console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
 });
