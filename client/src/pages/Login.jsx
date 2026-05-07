@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { useSocket } from '../context/SocketContext'
 
 export default function Login() {
   const navigate = useNavigate()
+  const { reconnect } = useSocket()
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -22,6 +24,7 @@ export default function Login() {
       const { data } = await api.post('/auth/login', form)
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
+      reconnect(data.token)
       navigate('/chat')
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed')
