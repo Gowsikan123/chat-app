@@ -63,9 +63,3 @@ npm run dev
 - Managing authenticated socket connections — attaching JWT verification to the Socket.io handshake
 - Broadcasting events to specific rooms vs. all connected clients
 - Handling disconnection and reconnection gracefully
-
----
-
-## Author
-
-**Gowsikan** — [GitHub](https://github.com/Gowsikan123)
